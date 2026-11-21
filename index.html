@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Brasil sabor Ticket</title>
+<link rel="stylesheet" href="style.css">
+<script defer src="layout.js"></script>
+<script defer src="shapes.js"></script>
+<script defer src="maps.js"></script>
+<script defer src="engine.js"></script>
+<script defer src="game.js"></script>
+</head>
+<body>
+<header class="top">
+  <div class="brand"><span class="mark" aria-hidden="true">▤</span><div><strong>Brasil sabor Ticket · v0.9</strong><small>Ferrovias do Brasil</small></div></div>
+  <div class="tools"><button id="sound" aria-pressed="true">Som ligado</button><button id="help">Como jogar</button><button id="license-tab">Sobre e licença</button><button id="end-game" hidden>Encerrar</button><button id="menu">Nova partida</button></div>
+</header>
+<section id="opening" class="opening" aria-label="Tela de abertura">
+  <div id="brazil-art" class="brazil-art" aria-hidden="true">
+    <svg id="brazil-svg" viewBox="0 0 450 460" preserveAspectRatio="xMidYMid meet">
+      <defs>
+        <linearGradient id="brazil-metal" x1="0" y1="0" x2="1" y2="1">
+          <stop stop-color="#164c31"/><stop offset=".3" stop-color="#70af53"/>
+          <stop offset=".46" stop-color="#c6e480"/><stop offset=".52" stop-color="#4c8854"/>
+          <stop offset=".76" stop-color="#1b7659"/><stop offset="1" stop-color="#0b413f"/>
+        </linearGradient>
+      </defs>
+      <g id="brazil-states"></g>
+    </svg>
+  </div>
+  <div class="opening-title">
+    <h1><span>Brasil</span> <small>sabor</small> <strong>Ticket</strong></h1>
+    <div class="opening-actions">
+      <button class="primary" id="play-now">Preparar partida</button>
+      <button id="configure-ip">Criar sala online</button>
+      <button id="opening-license">Sobre e licença</button>
+      <button id="resume-room" hidden>Retomar sala</button>
+    </div>
+    <p id="opening-notice" role="status"></p>
+  </div>
+  <p id="zoom-label" role="status"></p>
+</section>
+<main id="game-board" hidden>
+<section class="intro"><div><p class="eyebrow">ESTRATÉGIA FERROVIÁRIA</p><h1>Brasil sabor Ticket</h1><p>Construa sua rede ferroviária em um dos 27 mapas do Brasil.</p></div><div id="round" class="round">2 a 6 jogadores</div></section>
+<div class="layout">
+  <section class="board panel" aria-label="Tabuleiro ferroviário">
+    <div class="board-head">
+      <div><h2>Mapa ferroviário</h2><p id="map-name">Distrito Federal · mapa esquemático</p></div>
+      <div class="tools">
+        <button id="map-zoom-out" type="button" aria-label="Reduzir zoom do mapa" disabled>−</button>
+        <button id="map-zoom-in" type="button" aria-label="Ampliar mapa">+</button>
+        <div id="map-directions" role="group" aria-label="Mover pelo mapa">
+          <button type="button" data-direction="ArrowUp" aria-label="Mover para cima" aria-controls="map-scroll">↑</button>
+          <button type="button" data-direction="ArrowLeft" aria-label="Mover para a esquerda" aria-controls="map-scroll">←</button>
+          <button type="button" data-direction="ArrowDown" aria-label="Mover para baixo" aria-controls="map-scroll">↓</button>
+          <button type="button" data-direction="ArrowRight" aria-label="Mover para a direita" aria-controls="map-scroll">→</button>
+        </div>
+        <button id="tilt" aria-pressed="true">Vista 3D</button>
+      </div>
+    </div>
+    <div id="map-scroll" class="map-scroll" tabindex="0" role="region" aria-label="Mapa ferroviário. Arraste ou use as setas para navegar. Use Ctrl mais ou Ctrl menos para ajustar o zoom."><div id="scene" class="scene"><div class="tabletop">
+      <svg id="map" viewBox="0 0 860 570" aria-label="Estações e trechos ferroviários">
+        <defs>
+        <linearGradient id="metal-land" x1="0" y1="0" x2=".9" y2="1">
+          <stop stop-color="#ddeff7"/><stop offset=".20" stop-color="#9db8c6"/>
+          <stop offset=".43" stop-color="#f4fdff"/><stop offset=".50" stop-color="#d9e7ed"/>
+          <stop offset=".51" stop-color="#819cab"/><stop offset=".79" stop-color="#bdd6df"/>
+          <stop offset="1" stop-color="#6f8d9e"/>
+        </linearGradient>
+        <linearGradient id="metal-edge" x2="0" y2="1">
+          <stop stop-color="#536878"/><stop offset=".29" stop-color="#e7fbff"/>
+          <stop offset=".44" stop-color="#73959f"/><stop offset="1" stop-color="#263745"/>
+        </linearGradient>
+        <linearGradient id="metal-shine" x1="0" y1="1" x2="1" y2="0">
+          <stop offset=".10" stop-color="#74cae8" stop-opacity=".08"/><stop offset=".37" stop-color="#051e36" stop-opacity=".18"/>
+          <stop offset=".45" stop-color="#fff" stop-opacity=".05"/><stop offset=".54" stop-color="#fff" stop-opacity=".61"/>
+          <stop offset=".64" stop-color="#fff" stop-opacity=".04"/><stop offset="1" stop-color="#1e5579" stop-opacity=".16"/>
+        </linearGradient>
+        <pattern id="dots" width="19" height="19" patternUnits="userSpaceOnUse"><circle cx="3" cy="3" r="1.4" fill="#715039" opacity=".31"/></pattern></defs>
+        <g id="board-outline">
+          <path class="shadow"/><path class="land"/><path fill="url(#metal-shine)"/><path fill="url(#dots)"/>
+        </g>
+        <path class="lake" d="M552 193Q592 191 591 208T565 239Q574 262 611 270M566 239Q537 253 539 273M589 218 613 210"/>
+        <path class="park" d="M351 81q80 8 88 42t-58 29q-56-10-61-34t31-37M725 390q56-28 63 33t-41 55q-61-27-22-88"/>
+        <text x="116" y="82" class="map-caption" id="map-caption">DISTRITO FEDERAL</text>
+        <g id="routes"></g><g id="stations"></g>
+      </svg>
+      <div id="trains" aria-hidden="true"></div>
+    </div></div></div>
+    <div class="legend"><strong id="cars-total">0 vagões no tabuleiro</strong><label>Destacar estação <select id="station-filter"><option value="">Todas</option></select></label><label><input id="my-routes-only" type="checkbox"> Mostrar só minhas rotas</label><span><i></i> Cor e símbolo do trecho</span><span>● Estação</span><span>Cada quadrinho recebe um vagão. Selecione o trecho para ver os custos.</span></div>
+  </section>
+  <aside class="sidebar sidebar-left" aria-label="Trecho selecionado e placar">
+    <section class="panel detail"><h2>Trecho selecionado</h2><label class="visually-hidden" for="route-picker">Selecionar trecho</label><select id="route-picker"><option value="">Escolha no mapa</option></select><p id="route-info" aria-live="polite">Selecione um trecho para ver o custo.</p><button class="primary" id="build" disabled>Inaugurar trecho</button></section>
+    <section class="panel scores"><h2>Placar</h2><ol id="scores"></ol><p id="event" role="status"></p><button id="show-results" type="button" hidden>Ver placar final</button></section>
+  </aside>
+  <aside class="sidebar sidebar-right" aria-label="Bilhetes privados e central de operações">
+    <section class="panel ticket-panel" id="ticket-panel" hidden>
+      <p class="eyebrow">BILHETES PRIVADOS</p><h2 id="ticket-title">Escolha seus destinos</h2>
+      <p id="ticket-status"></p><form id="ticket-form"><div id="ticket-list"></div><button class="primary" id="keep" disabled>Confirmar bilhetes</button></form>
+      <ul id="private-tickets"></ul>
+    </section>
+    <section class="panel turn"><p class="eyebrow">CENTRAL DE OPERAÇÕES</p><h2 id="current">Prepare a partida</h2><p id="final-note" role="status"></p><p id="goal">Selecione o modo de jogo para começar.</p><div id="credits"></div><p id="reserve"></p><button class="primary" id="fund" disabled>Comprar 2 cartas + 4 créditos</button>
+    <button id="new-tickets" type="button" hidden>Pegar novos bilhetes</button>
+    <h3>Oficina <small id="deck"></small></h3><p>Escolha 1 carta e receba 2 créditos.</p><div id="market" class="cards"></div>
+    <h3 id="hand-title">Sua mão</h3><div id="hand" class="cards"></div></section>
+  </aside>
+</div>
+</main>
+<dialog id="results" aria-labelledby="results-title">
+  <h2 id="results-title">Placar final</h2>
+  <p id="result-winners"></p>
+  <p id="score-rules">Cada quadrinho construído vale 1 ponto. Um trecho rende 2 pontos de bônus ao tocar pelo menos uma estação que já faz parte da sua rede. Bilhetes concluídos somam pontos, e bilhetes incompletos descontam seu valor.</p>
+  <div class="results-scroll" tabindex="0" role="region" aria-label="Tabela de pontuação">
+    <table class="results-table" aria-describedby="score-rules">
+      <thead><tr><th scope="col">Jogador</th><th scope="col">Trechos</th><th scope="col">Bônus de conexão</th><th scope="col">Bilhetes concluídos</th><th scope="col">Bilhetes incompletos</th><th scope="col">Total</th></tr></thead>
+      <tbody id="results-rows"></tbody>
+    </table>
+  </div>
+  <form method="dialog" class="actions"><button class="primary">Fechar placar</button></form>
+</dialog>
+<dialog id="handoff"><p class="eyebrow">PASSAGEM DE CONTROLE</p><h2 id="handoff-title"></h2><p>Entregue o controle ao jogador indicado. As cartas ficam ocultas até ele confirmar.</p><div class="actions"><button class="primary" id="reveal">Mostrar minhas cartas</button></div></dialog>
+<dialog id="setup"><form id="setup-form"><p class="eyebrow">TRILHOS DO CERRADO</p><h2>Preparar partida</h2><label>Modo de jogo<select id="mode"><option value="local">Local · mesmo computador</option><option value="host">Online · criar sala</option><option value="join">Online · entrar em uma sala</option></select></label>
+<div id="local-fields"><label>Jogadores<select id="count"></select></label><div id="names"></div></div>
+<div id="online-fields" hidden><label>Seu nome<input id="nickname" maxlength="24" value="Operadora"></label>
+<div id="host-fields" hidden>
+  <label>IP do servidor<select id="lan-ip"></select></label>
+  <label>Porta<input id="lan-port" type="number" min="1" max="65535" step="1"></label>
+  <label>Vagas (incluindo o anfitrião)<select id="capacity"><option>2</option><option>3</option><option>4</option><option>5</option><option selected>6</option></select></label>
+</div>
+<div id="join-fields" hidden>
+  <label>Salas com vaga<select id="available-rooms"></select></label>
+  <button type="button" id="refresh-rooms">Buscar salas na rede</button>
+</div></div>
+<p id="setup-status" role="status"></p>
+<p id="setup-error" role="alert"></p><div class="actions"><button id="cancel" type="button">Voltar</button><button class="primary" id="setup-submit">Começar</button></div></form></dialog>
+<dialog id="lobby"><h2>Sala online</h2>
+<p id="share-url"></p><p id="room-capacity"></p><ul id="members"></ul><label id="lobby-paint-label">Sua cor<select id="lobby-paint"></select></label>
+<section id="join-requests" hidden><h3>Pedidos de entrada</h3><ul id="pending-players"></ul></section>
+<p id="lobby-status" role="status"></p><div class="actions"><button id="leave">Sair</button><button id="start" class="primary" disabled>Iniciar votação</button></div></dialog>
+<dialog id="vote"><form id="vote-form">
+<p class="eyebrow">ESCOLHA DO TABULEIRO</p><h2 id="vote-title">Votar no mapa</h2>
+<p id="vote-status" role="status"></p><label id="vote-field">Mapa<select id="vote-select"></select></label>
+<div class="actions"><button type="button" id="vote-exit">Sair</button><button class="primary" id="vote-send">Confirmar voto</button></div>
+</form></dialog>
+<dialog id="license" aria-labelledby="license-title">
+<h2 id="license-title">Sobre e licença</h2>
+<p>Brasil sabor Ticket v0.9 · jogo ferroviário para 2 a 6 jogadores.</p>
+<p><strong>Brasil sabor Ticket</strong> é software livre sob a GNU General Public License, versão 3.</p>
+<p>Você pode usar, estudar, modificar e redistribuir o jogo, inclusive versões modificadas, conforme os termos da GPL. Ao redistribuir, preserve os avisos de licença e disponibilize o código-fonte correspondente nos termos da licença.</p>
+<dl><dt>Criação orientada por</dt><dd>Alex Ricardo dos Santos</dd><dt>Desenvolvimento</dt><dd>Codex (GPT)</dd><dt>Data da declaração de licença</dt><dd><time datetime="2026-11-19">19 de novembro de 2026</time></dd></dl>
+<p><a href="LICENSE" target="_blank" rel="noopener">Ler o texto integral da licença</a></p>
+<p>Contornos cartográficos adaptados de Lucas Bassetti e Felipe Duardo sob a <a href="CARTOGRAFIA-LICENSE" target="_blank" rel="noopener">licença MIT</a>.</p>
+<form method="dialog"><button class="primary">Fechar</button></form>
+</dialog>
+<dialog id="end-confirm" aria-labelledby="end-title"><h2 id="end-title">Encerrar partida?</h2>
+<p id="end-message"></p><p id="end-error" role="alert"></p>
+<div class="actions"><button id="end-cancel">Continuar</button><button id="end-accept" class="primary">Encerrar</button></div>
+</dialog>
+<dialog id="rules"><h2>Como jogar</h2><ol>
+<li>Cada operadora começa com 5 créditos e 4 cartas de vagão ou locomotiva. Antes da primeira rodada, recebe 4 bilhetes aleatórios e escolhe pelo menos 2 em segredo.</li>
+<li>Cada bilhete indica dois destinos. Use seus próprios trechos para conectá-los. Se outra operadora comprar uma ligação, procure um caminho alternativo.</li>
+<li>Em seu turno, escolha uma ação. Compre 2 cartas fechadas e receba 4 créditos, pegue 1 carta da oficina e receba 2 créditos, ou inaugure um trecho.</li>
+<li>Construa trechos de 1 a 8 quadrinhos. Pague um crédito por quadrinho e uma carta da cor do trecho a cada dois quadrinhos, arredondando para cima. Uma locomotiva pode substituir uma dessas cartas.</li>
+<li>Se concluir todos os seus bilhetes, você pode usar um turno futuro para pegar até quatro novos bilhetes e manter pelo menos dois.</li>
+<li>Quando alguém ficar com dois vagões ou menos, cada adversário joga mais uma vez. Some os pontos dos bilhetes completos e desconte os incompletos. Vence quem tiver mais pontos.</li>
+<li>Se nenhum trecho principal livre couber na sua reserva, o mapa abre vias paralelas nos corredores já ocupados.</li>
+</ol><form method="dialog"><button class="primary">Entendi</button></form></dialog>
+</body>
+</html>
