@@ -1,4 +1,4 @@
-# Brasil sabor Ticket · v0.9
+# Brasil sabor Ticket · v0.10
 
 Jogo de estratégia ferroviária para 2 a 6 pessoas. A versão traz 27 tabuleiros com contornos cartográficos, um por unidade federativa, com 135 trechos principais em cada um. Os nomes são de localidades reais. A abertura e cada tabuleiro usam o mesmo contorno simplificado. Os trajetos são fictícios e as posições das estações foram ajustadas para o jogo.
 
@@ -16,7 +16,7 @@ Os inicializadores rodam com usuário comum, abrem o navegador padrão e usam a 
 
 O servidor é JavaScript e os inicializadores precisam de Node.js no PATH ou de um runtime portátil na pasta extraída. Coloque `node.exe` em `runtime\node.exe` no Windows ou `node` em `runtime/bin/node` no Linux. Nenhum pacote npm é necessário. No Windows 7, escolha um runtime compatível com esse sistema, como o [Node.js 12 portátil](https://nodejs.org/download/release/v12.22.12/), e um navegador com suporte a diálogos HTML. Esse runtime legado é indicado apenas para uso local.
 
-Durante uma partida, use **Encerrar** para voltar à abertura. No modo online, o anfitrião pode encerrar para todos; os convidados podem voltar e retomar a sala enquanto ela estiver aberta.
+Durante uma partida, use **Encerrar** para voltar à abertura. No modo online, o anfitrião pode encerrar para todos; os convidados podem voltar e retomar a sala enquanto ela estiver aberta. No modo local, o chat funciona como quadro de recados entre as operadoras que se alternam no mesmo computador.
 
 ## Jogar em rede
 
@@ -27,6 +27,16 @@ Os convidados podem abrir o endereço mostrado na sala ou iniciar esta mesma ver
 A descoberta entre computadores usa broadcast UDP na porta **43891** na rede local. Se o Wi-Fi ou o firewall bloquear a descoberta, abra diretamente o endereço mostrado na sala e selecione **Online · entrar em uma sala**. A porta TCP escolhida para a sala precisa estar acessível aos convidados.
 
 Em um servidor convencional, rode `node server.js`. Para iniciar sem pergunta, defina `HOST` explicitamente. Execuções sem terminal interativo usam `HOST` quando definido e escutam em todas as interfaces IPv4 por padrão. O comando mantém a porta padrão 81 e aceita a variável `PORT`. As salas ficam em memória. Uma aba pode ser recarregada para retomar a própria sessão.
+
+## Chat em tempo real e retomada
+
+No modo online, o painel **Chat dos jogadores** aceita mensagens de até 240 caracteres. O envio usa `Enter` ou o botão **Enviar**, e cada mensagem chega às demais operadoras imediatamente por *Server-Sent Events* (`GET /api/events`), sem dependências externas. O nome e a borda da mensagem usam a cor escolhida por cada jogador; chegadas de outros jogadores tocam um alerta sonoro duplo, respeitando o botão **Som ligado**. Com a aba em segundo plano, o título ganha um aviso e o botão **Chat** mostra quantas mensagens não foram lidas. A consulta periódica continua funcionando como fallback se a conexão de eventos cair, e o histórico das últimas 100 mensagens é entregue a quem entra depois. O servidor limita mensagens a uma a cada 500 ms e descarta caracteres de controle; o texto é exibido como texto, nunca como HTML.
+
+A sessão da sala passa a ser gravada também no `localStorage`. Se o navegador fechar de forma inesperada, basta reabrir o endereço do servidor: a partida é retomada automaticamente enquanto a sala ainda existir (até 6 horas sem atividade). Se o servidor estiver fora do ar, a abertura oferece **Retomar sala** para tentar novamente; uma sala encerrada é descartada. A retomada preserva o turno, as cartas privadas, os votos e o histórico do chat.
+
+## Interface
+
+O chat ocupa o topo da página, logo abaixo do cabeçalho, e mostra apenas as **últimas seis mensagens**. O campo de texto é editável e envia com `Enter` (`Shift+Enter` insere quebra de linha). A **Central de operações** aparece no topo da coluna lateral, acima dos **Bilhetes privados**. Os bilhetes concluídos saem da lista principal e podem ser consultados pelo botão **Ver bilhetes concluídos**, que abre um popup com as rotas e os pontos. No placar final, todos os valores de cada operadora são exibidos — incluindo os pontos de bilhetes — e cada bilhete é descrito individualmente como concluído ou incompleto. O tabuleiro usa a largura máxima disponível, com colunas laterais compactas e perspectiva reduzida para facilitar a leitura.
 
 ## Regras do tabuleiro
 

@@ -13,9 +13,18 @@
 </head>
 <body>
 <header class="top">
-  <div class="brand"><span class="mark" aria-hidden="true">▤</span><div><strong>Brasil sabor Ticket · v0.9</strong><small>Ferrovias do Brasil</small></div></div>
-  <div class="tools"><button id="sound" aria-pressed="true">Som ligado</button><button id="help">Como jogar</button><button id="license-tab">Sobre e licença</button><button id="end-game" hidden>Encerrar</button><button id="menu">Nova partida</button></div>
+  <div class="brand"><span class="mark" aria-hidden="true">▤</span><div><strong>Brasil sabor Ticket · v0.10</strong><small>Ferrovias do Brasil</small></div></div>
+  <div class="tools"><button id="sound" aria-pressed="true">Som ligado</button><button id="chat-focus" hidden>Chat<span id="chat-badge" hidden>0</span></button><button id="help">Como jogar</button><button id="license-tab">Sobre e licença</button><button id="end-game" hidden>Encerrar</button><button id="menu">Nova partida</button></div>
 </header>
+<section id="chat-panel" class="chat-top" aria-label="Chat dos jogadores" hidden>
+  <div class="chat-head"><h2>Chat dos jogadores</h2><span id="chat-status" role="status"></span></div>
+  <ol id="chat-log" role="log" aria-live="polite" aria-label="Últimas seis mensagens" tabindex="0"></ol>
+  <form id="chat-form" autocomplete="off">
+    <label class="visually-hidden" for="chat-input">Escreva sua mensagem</label>
+    <textarea id="chat-input" maxlength="240" rows="2" placeholder="Escreva para todos…" required></textarea>
+    <button id="chat-send" class="primary" type="submit" disabled>Enviar</button>
+  </form>
+</section>
 <section id="opening" class="opening" aria-label="Tela de abertura">
   <div id="brazil-art" class="brazil-art" aria-hidden="true">
     <svg id="brazil-svg" viewBox="0 0 450 460" preserveAspectRatio="xMidYMid meet">
@@ -94,16 +103,17 @@
     <section class="panel detail"><h2>Trecho selecionado</h2><label class="visually-hidden" for="route-picker">Selecionar trecho</label><select id="route-picker"><option value="">Escolha no mapa</option></select><p id="route-info" aria-live="polite">Selecione um trecho para ver o custo.</p><button class="primary" id="build" disabled>Inaugurar trecho</button></section>
     <section class="panel scores"><h2>Placar</h2><ol id="scores"></ol><p id="event" role="status"></p><button id="show-results" type="button" hidden>Ver placar final</button></section>
   </aside>
-  <aside class="sidebar sidebar-right" aria-label="Bilhetes privados e central de operações">
-    <section class="panel ticket-panel" id="ticket-panel" hidden>
-      <p class="eyebrow">BILHETES PRIVADOS</p><h2 id="ticket-title">Escolha seus destinos</h2>
-      <p id="ticket-status"></p><form id="ticket-form"><div id="ticket-list"></div><button class="primary" id="keep" disabled>Confirmar bilhetes</button></form>
-      <ul id="private-tickets"></ul>
-    </section>
+  <aside class="sidebar sidebar-right" aria-label="Central de operações e bilhetes privados">
     <section class="panel turn"><p class="eyebrow">CENTRAL DE OPERAÇÕES</p><h2 id="current">Prepare a partida</h2><p id="final-note" role="status"></p><p id="goal">Selecione o modo de jogo para começar.</p><div id="credits"></div><p id="reserve"></p><button class="primary" id="fund" disabled>Comprar 2 cartas + 4 créditos</button>
     <button id="new-tickets" type="button" hidden>Pegar novos bilhetes</button>
     <h3>Oficina <small id="deck"></small></h3><p>Escolha 1 carta e receba 2 créditos.</p><div id="market" class="cards"></div>
     <h3 id="hand-title">Sua mão</h3><div id="hand" class="cards"></div></section>
+    <section class="panel ticket-panel" id="ticket-panel" hidden>
+      <p class="eyebrow">BILHETES PRIVADOS</p><h2 id="ticket-title">Escolha seus destinos</h2>
+      <p id="ticket-status"></p><form id="ticket-form"><div id="ticket-list"></div><button class="primary" id="keep" disabled>Confirmar bilhetes</button></form>
+      <ul id="private-tickets"></ul>
+      <button id="completed-tickets" type="button" hidden>Ver bilhetes concluídos</button>
+    </section>
   </aside>
 </div>
 </main>
@@ -113,11 +123,18 @@
   <p id="score-rules">Cada quadrinho construído vale 1 ponto. Um trecho rende 2 pontos de bônus ao tocar pelo menos uma estação que já faz parte da sua rede. Bilhetes concluídos somam pontos, e bilhetes incompletos descontam seu valor.</p>
   <div class="results-scroll" tabindex="0" role="region" aria-label="Tabela de pontuação">
     <table class="results-table" aria-describedby="score-rules">
-      <thead><tr><th scope="col">Jogador</th><th scope="col">Trechos</th><th scope="col">Bônus de conexão</th><th scope="col">Bilhetes concluídos</th><th scope="col">Bilhetes incompletos</th><th scope="col">Total</th></tr></thead>
+      <thead><tr><th scope="col">Jogador</th><th scope="col">Trechos</th><th scope="col">Bônus de conexão</th><th scope="col">Bilhetes concluídos</th><th scope="col">Bilhetes incompletos</th><th scope="col">Pontos de bilhetes</th><th scope="col">Total</th></tr></thead>
       <tbody id="results-rows"></tbody>
     </table>
   </div>
+  <div id="final-tickets" class="final-tickets" aria-label="Descrição dos bilhetes"></div>
   <form method="dialog" class="actions"><button class="primary">Fechar placar</button></form>
+</dialog>
+<dialog id="completed" aria-labelledby="completed-title">
+  <h2 id="completed-title">Bilhetes concluídos</h2>
+  <p id="completed-note"></p>
+  <ul id="completed-list"></ul>
+  <form method="dialog" class="actions"><button class="primary">Fechar</button></form>
 </dialog>
 <dialog id="handoff"><p class="eyebrow">PASSAGEM DE CONTROLE</p><h2 id="handoff-title"></h2><p>Entregue o controle ao jogador indicado. As cartas ficam ocultas até ele confirmar.</p><div class="actions"><button class="primary" id="reveal">Mostrar minhas cartas</button></div></dialog>
 <dialog id="setup"><form id="setup-form"><p class="eyebrow">TRILHOS DO CERRADO</p><h2>Preparar partida</h2><label>Modo de jogo<select id="mode"><option value="local">Local · mesmo computador</option><option value="host">Online · criar sala</option><option value="join">Online · entrar em uma sala</option></select></label>
@@ -145,7 +162,7 @@
 </form></dialog>
 <dialog id="license" aria-labelledby="license-title">
 <h2 id="license-title">Sobre e licença</h2>
-<p>Brasil sabor Ticket v0.9 · jogo ferroviário para 2 a 6 jogadores.</p>
+<p>Brasil sabor Ticket v0.10 · jogo ferroviário para 2 a 6 jogadores.</p>
 <p><strong>Brasil sabor Ticket</strong> é software livre sob a GNU General Public License, versão 3.</p>
 <p>Você pode usar, estudar, modificar e redistribuir o jogo, inclusive versões modificadas, conforme os termos da GPL. Ao redistribuir, preserve os avisos de licença e disponibilize o código-fonte correspondente nos termos da licença.</p>
 <dl><dt>Criação orientada por</dt><dd>Alex Ricardo dos Santos</dd><dt>Desenvolvimento</dt><dd>Codex (GPT)</dd><dt>Data da declaração de licença</dt><dd><time datetime="2026-11-19">19 de novembro de 2026</time></dd></dl>
@@ -165,6 +182,6 @@
 <li>Se concluir todos os seus bilhetes, você pode usar um turno futuro para pegar até quatro novos bilhetes e manter pelo menos dois.</li>
 <li>Quando alguém ficar com dois vagões ou menos, cada adversário joga mais uma vez. Some os pontos dos bilhetes completos e desconte os incompletos. Vence quem tiver mais pontos.</li>
 <li>Se nenhum trecho principal livre couber na sua reserva, o mapa abre vias paralelas nos corredores já ocupados.</li>
-</ol><form method="dialog"><button class="primary">Entendi</button></form></dialog>
+</ol><p>No modo online, o chat no topo da página entrega mensagens em tempo real para todas as operadoras, com o nome na cor escolhida e um alerta sonoro. Os bilhetes concluídos saem da lista e podem ser revistos em <strong>Ver bilhetes concluídos</strong>. Se o navegador fechar, reabra o endereço da sala: a partida é retomada automaticamente enquanto a sala existir.</p><form method="dialog"><button class="primary">Entendi</button></form></dialog>
 </body>
 </html>

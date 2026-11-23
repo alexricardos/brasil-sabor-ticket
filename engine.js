@@ -132,10 +132,11 @@
       state.ended=true;
       state.players.forEach((player,i)=>{
         let completed=0, incomplete=0;
-        for (const [a,b,value] of player.tickets) {
-          if (connected(state,i,a,b)) completed+=value;
-          else incomplete-=value;
-        }
+        player.finalTickets=player.tickets.map(([a,b,value])=>{
+          const done=connected(state,i,a,b);
+          if (done) completed+=value; else incomplete-=value;
+          return {a,b,value,complete:done};
+        });
         const routes=startingCars-player.cars;
         player.finalScore={routes,connections:player.points-routes,completed,incomplete};
         player.ticketPoints=completed+incomplete;

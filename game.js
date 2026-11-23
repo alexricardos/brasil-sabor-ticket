@@ -39,6 +39,8 @@ function showBoard(code,onReady,animate=true) {
   zoomTimer=setTimeout(complete,2800);
 }
 let state, session, poll, revealed = false, selected = null, busy = false, sound = true, audio;
+let events=null, chatSeen=new Set(), chatIds=[], chatUnread=0, localChatSeq=0, titleTimer;
+const baseTitle=document.title;
 const routeName = ([a,b]) => cities[a][0] + ' — ' + cities[b][0];
 function complementary(hex) {
   const channels = hex.slice(1).match(/../g).map(channel=>parseInt(channel,16));
@@ -230,6 +232,120 @@ function tone(note, success=false) {
     osc.connect(gain); gain.connect(audio.destination); osc.start(at); osc.stop(at+.18);
   });
 }
+function chatTone() {
+  if (!sound) return;
+  const Ctx = window.AudioContext || window.webkitAudioContext;
+  if (!Ctx) return;
+  audio ||= new Ctx();
+  audio.resume().catch(()=>{});
+  const start=audio.currentTime;
+  [[784,0],[1046,.12]].forEach(([frequency,delay])=>{
+    const at=start+delay, osc=audio.createOscillator(), gain=audio.createGain();
+    osc.type='sine'; osc.frequency.value=frequency;
+    gain.gain.setValueAtTime(.0001,at);
+    gain.gain.exponentialRampToValueAtTime(.09,at+.015);
+    gain.gain.exponentialRampToValueAtTime(.001,at+.2);
+    osc.connect(gain); gain.connect(audio.destination); osc.start(at); osc.stop(at+.21);
+  });
+}
+function setChatStatus(text) { $('chat-status').textContent=text; }
+function updateChatBadge() {
+  const badge=$('chat-badge');
+  badge.hidden=!chatUnread;
+  badge.textContent=chatUnread>9 ? '9+' : chatUnread;
+}
+function clearChatBadge() { chatUnread=0; updateChatBadge(); }
+function updateChatAvailability() {
+  const active=Boolean(session || state);
+  $('chat-panel').hidden=!active;
+  $('chat-focus').hidden=!active;
+  if (!active) setChatStatus('');
+  else if (!events && session) setChatStatus('Conectando…');
+}
+function flashTitle() {
+  if (document.hidden && !titleTimer) {
+    let on=false;
+    titleTimer=setInterval(()=>{
+      on=!on;
+      document.title=on ? '💬 Nova mensagem · '+baseTitle : baseTitle;
+      if (!document.hidden) {
+        clearInterval(titleTimer); titleTimer=null; document.title=baseTitle;
+      }
+    },900);
+  }
+}
+function syncChat(messages) {
+  if (!Array.isArray(messages)) return;
+  const log=$('chat-log');
+  let added=false, incoming=0;
+  for (const message of messages) {
+    if (!message || !Number.isInteger(message.id) || chatSeen.has(message.id)) continue;
+    chatSeen.add(message.id); chatIds.push(message.id); added=true;
+    const mine=Boolean(message.local || (session && message.index===session.index));
+    const row=document.createElement('li');
+    row.className='chat-message'+(mine ? ' mine' : '');
+    row.style.setProperty('--chat-color',colors[message.paint] || '#9fd7e8');
+    const meta=document.createElement('span'), who=document.createElement('strong'), time=document.createElement('time');
+    meta.className='chat-meta';
+    who.textContent=message.name || 'Jogador';
+    if (Number.isInteger(message.paint)) paintElement(who,message.paint);
+    const when=new Date(Number(message.time) || Date.now());
+    time.dateTime=when.toISOString();
+    time.textContent=when.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+    meta.append(who,time);
+    const text=document.createElement('span');
+    text.className='chat-text'; text.textContent=message.text;
+    row.append(meta,text); log.append(row);
+    if (!mine) { incoming++; chatUnread++; }
+  }
+  while (chatIds.length>200) {
+    chatSeen.delete(chatIds.shift());
+    while (log.children.length>6) log.firstElementChild.remove();
+  }
+  while (log.children.length>6) log.firstElementChild.remove();
+  if (added) {
+    log.scrollTop=log.scrollHeight;
+    if (incoming) { chatTone(); flashTitle(); updateChatBadge(); }
+  }
+}
+async function sendChat(value) {
+  const text=String(value ?? '').replace(/[\u0000-\u001f\u007f]/g,' ').trim().slice(0,240);
+  if (!text) return false;
+  if (session) {
+    const result=await api('chat',{...session,text});
+    syncChat(result.chat); apply(result);
+    return true;
+  }
+  if (state) {
+    const index=localIndex();
+    const player=localPlayers?.[index] || state.players[index];
+    syncChat([{id:++localChatSeq,index,name:player.name,paint:player.paint,
+      time:Date.now(),text,local:true}]);
+    return true;
+  }
+  return false;
+}
+function connectEvents() {
+  events?.close(); events=null;
+  if (!session || location.protocol==='file:') { updateChatAvailability(); return; }
+  events=new EventSource('/api/events?code='+encodeURIComponent(session.code)+
+    '&token='+encodeURIComponent(session.token));
+  events.onopen=()=>setChatStatus('Ao vivo');
+  events.onerror=()=>setChatStatus('Reconectando…');
+  events.addEventListener('update',event=>{
+    try {
+      const data=JSON.parse(event.data);
+      syncChat(data.chat); apply(data);
+    } catch { /* Evento inválido: a consulta periódica faz a sincronização. */ }
+  });
+  events.addEventListener('closed',event=>{
+    events?.close(); events=null;
+    let message='A sala foi encerrada.';
+    try { message=JSON.parse(event.data).error || message; } catch { /* Mantém o padrão. */ }
+    reset(); $('opening-notice').textContent=message;
+  });
+  updateChatAvailability();
+}
 function cardTile(id, count, slot, allowed) {
   const [name,color,symbol] = cardTypes[id];
   const card = document.createElement(slot === undefined ? 'div' : 'button');
@@ -281,19 +397,19 @@ function renderTickets(index, player, drafting) {
       list.append(label);
     });
   }
-  $('private-tickets').replaceChildren();
-  tickets?.forEach(ticket=>{
+  const pending=(tickets || []).filter(ticket=>!connected(state,index,ticket[0],ticket[1]));
+  const completedCount=(tickets?.length || 0)-pending.length;
+  $('private-tickets').replaceChildren(...pending.map(ticket=>{
     const row=document.createElement('li');
-    const done=connected(state,index,ticket[0],ticket[1]);
-    row.textContent=routeName(ticket)+' · '+ticket[2]+' pts';
-    if (done) {
-      const status=document.createElement('strong');
-      status.className='ticket-complete';
-      status.textContent='Concluído';
-      row.append(' · ',status);
-    }
-    $('private-tickets').append(row);
-  });
+    row.textContent=routeName(ticket)+' · '+ticket[2]+' pts · pendente';
+    return row;
+  }));
+  const completedButton=$('completed-tickets');
+  completedButton.hidden=!tickets || !completedCount;
+  completedButton.textContent='Ver bilhetes concluídos ('+completedCount+')';
+  if (!drafting && tickets && !pending.length) {
+    $('ticket-status').textContent='Todos os seus bilhetes foram concluídos.';
+  }
 }
 function renderFinalResults() {
   const button=$('show-results');
@@ -312,7 +428,7 @@ function renderFinalResults() {
     name.textContent=player.name;
     row.append(name);
     const {routes,connections,completed,incomplete}=player.finalScore || {};
-    for (const value of [routes,connections,completed,incomplete]) {
+    for (const value of [routes,connections,completed,incomplete,player.ticketPoints]) {
       const cell=document.createElement('td');
       cell.textContent=value==null ? '—' : signed.format(value);
       row.append(cell);
@@ -322,9 +438,47 @@ function renderFinalResults() {
     row.append(total);
     return row;
   }));
+  $('final-tickets').replaceChildren(...players.map(player=>{
+    const box=document.createElement('section');
+    const heading=document.createElement('h3');
+    const index=state.players.indexOf(player);
+    heading.textContent=player.name;
+    playerColor(heading,index);
+    const list=document.createElement('ul');
+    const details=player.finalTickets || (player.tickets ? player.tickets.map(([a,b,value])=>({
+      a,b,value,complete:connected(state,index,a,b)})) : []);
+    for (const ticket of details) {
+      const item=document.createElement('li');
+      item.className=ticket.complete ? 'complete' : 'incomplete';
+      item.textContent=routeName([ticket.a,ticket.b])+' · '+ticket.value+' pts · '+
+        (ticket.complete ? 'concluído' : 'incompleto');
+      list.append(item);
+    }
+    if (!list.children.length) {
+      const empty=document.createElement('li');
+      empty.textContent='Nenhum bilhete registrado.';
+      list.append(empty);
+    }
+    box.append(heading,list);
+    return box;
+  }));
   if (first) $('results').showModal();
 }
 $('show-results').onclick=()=>$('results').showModal();
+$('completed-tickets').onclick=()=>{
+  if (!state) return;
+  const index=session ? session.index : localIndex();
+  const player=state.players[index];
+  const done=(player?.tickets || []).filter(ticket=>connected(state,index,ticket[0],ticket[1]));
+  $('completed-list').replaceChildren(...done.map(ticket=>{
+    const item=document.createElement('li');
+    item.textContent=routeName(ticket)+' · '+ticket[2]+' pts';
+    return item;
+  }));
+  $('completed-note').textContent=player ? player.name+' concluiu '+done.length+
+    (done.length===1 ? ' bilhete.' : ' bilhetes.') : '';
+  $('completed').showModal();
+};
 function render() {
   drawMap(state?.mapCode || 'DF');
   $('end-game').hidden=!state;
@@ -431,15 +585,25 @@ function render() {
     ' · '+required+' × '+kind[2]+' '+kind[0] : 'Selecione um trecho para ver o custo.';
   $('fund').disabled = !allowed;
   $('build').disabled = !allowed || !route || owner>=0 || player.funds<route[2] || player.cars<route[2] || !payment(player,selected,state.mapCode) || !parallelAccess(state,index,selected);
+  updateChatAvailability();
 }
+const sessionKey='cerrado-session';
 function loadSession() {
-  try { return sessionStorage.getItem('cerrado-session'); } catch { return null; }
+  for (const name of ['sessionStorage','localStorage']) {
+    try {
+      const value=window[name].getItem(sessionKey);
+      if (value) return value;
+    } catch { /* Alguns navegadores restringem armazenamento em arquivos locais. */ }
+  }
+  return null;
 }
 function saveSession(value) {
-  try {
-    if (value) sessionStorage.setItem('cerrado-session',JSON.stringify(value));
-    else sessionStorage.removeItem('cerrado-session');
-  } catch { /* Some browsers restrict storage in files. */ }
+  for (const name of ['localStorage','sessionStorage']) {
+    try {
+      if (value) window[name].setItem(sessionKey,JSON.stringify(value));
+      else window[name].removeItem(sessionKey);
+    } catch { /* Alguns navegadores restringem armazenamento em arquivos locais. */ }
+  }
 }
 async function api(path, data) {
   if (location.protocol==='file:') throw Error('Inicie o servidor para usar o modo online.');
@@ -492,6 +656,8 @@ function showVote(election, members, index) {
   if (!$('vote').open) $('vote').showModal();
 }
 function apply(snapshot,animate=true) {
+  syncChat(snapshot.chat);
+  updateChatAvailability();
   if (state && (!snapshot.state || snapshot.state.version<=state.version)) return;
   session.index = snapshot.index;
   saveSession(session);
@@ -537,6 +703,7 @@ function apply(snapshot,animate=true) {
 }
 function track(value) {
   session=value; saveSession(value); clearInterval(poll);
+  connectEvents();
   let pending=false;
   poll=setInterval(async ()=>{
     if (busy || pending) return;
@@ -557,6 +724,12 @@ function track(value) {
   },1500);
 }
 function reset() {
+  $('completed').close();
+  events?.close(); events=null;
+  if (titleTimer) { clearInterval(titleTimer); titleTimer=null; document.title=baseTitle; }
+  $('chat-log').replaceChildren();
+  chatSeen.clear(); chatIds.length=0; clearChatBadge(); localChatSeq=0;
+  $('chat-input').value=''; $('chat-send').disabled=true; setChatStatus('');
   $('results').close();
   $('my-routes-only').checked=false;
   clearInterval(poll); clearTimeout(zoomTimer);
@@ -694,6 +867,41 @@ $('route-picker').addEventListener('change',event=>choose(event.target.value==='
 $('new-tickets').onclick=()=>move('tickets');
 $('fund').onclick=()=>move('fund'); $('build').onclick=()=>move('build');
 $('sound').onclick=()=>{ sound=!sound; $('sound').textContent=sound?'Som ligado':'Som desligado'; $('sound').setAttribute('aria-pressed',sound); if(sound) tone(330); };
+$('chat-input').addEventListener('input',()=>{ $('chat-send').disabled=!$('chat-input').value.trim(); });
+$('chat-input').addEventListener('keydown',event=>{
+  if (event.key==='Enter' && !event.shiftKey) {
+    event.preventDefault();
+    $('chat-form').requestSubmit();
+  }
+});
+$('chat-input').addEventListener('focus',clearChatBadge);
+$('chat-focus').onclick=()=>{
+  clearChatBadge();
+  $('chat-panel').scrollIntoView({behavior:'smooth',block:'start'});
+  $('chat-input').focus();
+};
+$('chat-form').onsubmit=async event=>{
+  event.preventDefault();
+  const input=$('chat-input'), button=$('chat-send');
+  if (!input.value.trim() || button.disabled) return;
+  button.disabled=true; input.disabled=true;
+  try {
+    await sendChat(input.value);
+    input.value='';
+    setChatStatus(events?.readyState===1 ? 'Ao vivo' : 'Enviado');
+  } catch(error) {
+    setChatStatus(error.message);
+  } finally {
+    button.disabled=!input.value.trim();
+    input.disabled=false;
+    input.focus();
+  }
+};
+document.addEventListener('visibilitychange',()=>{
+  if (document.hidden) return;
+  if (titleTimer) { clearInterval(titleTimer); titleTimer=null; document.title=baseTitle; }
+  clearChatBadge();
+});
 $('tilt').onclick=()=>{ const flat=$('scene').classList.toggle('flat'); $('tilt').textContent=flat?'Vista plana':'Vista 3D'; $('tilt').setAttribute('aria-pressed',!flat); };
 $('help').onclick=()=>$('rules').showModal();
 $('license-tab').onclick=()=>$('license').showModal();
@@ -736,6 +944,7 @@ $('resume-room').onclick=async ()=>{
     parkedSession=null;
     $('resume-room').hidden=true;
     apply(snapshot,false);
+    $('opening-notice').textContent='Sessão retomada.';
   } catch(error) {
     $('opening-notice').textContent=error.message;
     if (error.status===410) {parkedSession=null; $('resume-room').hidden=true;}
@@ -903,8 +1112,26 @@ nameFields(); modeFields(); render();
     }
     return;
   }
-  try {
-    const saved=JSON.parse(loadSession());
-    if(saved) { const snapshot=await api('status',saved); track(saved); apply(snapshot,false); return; }
-  } catch { saveSession(null); }
+  const raw=loadSession();
+  if (raw) {
+    let saved=null;
+    try { saved=JSON.parse(raw); } catch { saveSession(null); }
+    if (saved) {
+      try {
+        const snapshot=await api('status',saved);
+        track(saved); apply(snapshot,false);
+        $('opening-notice').textContent='Sessão retomada automaticamente.';
+        return;
+      } catch(error) {
+        if (error.status===410) {
+          saveSession(null);
+          $('opening-notice').textContent='A sala salva não existe mais. Crie ou entre em outra.';
+        } else {
+          parkedSession=saved;
+          $('resume-room').hidden=false;
+          $('opening-notice').textContent='Servidor indisponível. Use Retomar sala quando a conexão voltar.';
+        }
+      }
+    }
+  }
 })();

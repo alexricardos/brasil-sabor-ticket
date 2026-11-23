@@ -18,6 +18,17 @@ const send = (response,status,body) => {
   response.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});
   response.end(JSON.stringify(body));
 };
+function sendEvent(response,event,data) {
+  if (response.destroyed || response.writableEnded) return;
+  response.write('event: '+event+'\ndata: '+JSON.stringify(data)+'\n\n');
+}
+function publish(room) {
+  if (!room.subscribers?.size) return;
+  for (const subscriber of room.subscribers) {
+    if (!room.members.includes(subscriber.member)) continue;
+    sendEvent(subscriber.response,'update',snapshot(room,subscriber.member));
+  }
+}
 function snapshot(room,member) {
   const index=room.members.indexOf(member);
   let state = null;
@@ -37,7 +48,8 @@ function snapshot(room,member) {
     capacity:room.capacity,requests:index===0 && hasSpace(room) ? [...room.requests]
       .filter(([,entry])=>entry.status==='pending' && entry.expires>Date.now())
       .map(([id,entry])=>({id,name:entry.name})) : [],
-    members:room.members.map(({name,paint})=>({name,paint})),election,state};
+    members:room.members.map(({name,paint})=>({name,paint})),election,state,
+    chat:room.chat.slice(-100)};
 }
 const hasSpace=room=>!room.state && !room.election && room.members.length<room.capacity;
 const cleanName=(name,fallback)=>String(name ?? '').trim().slice(0,24)||fallback;
@@ -63,6 +75,11 @@ async function readBody(request) {
 }
 function removeRoom(room) {
   rooms.delete(room.code);
+  for (const subscriber of room.subscribers) {
+    sendEvent(subscriber.response,'closed',{error:'A sala foi encerrada.'});
+    subscriber.response.end();
+  }
+  room.subscribers.clear();
   room.listener?.close();
 }
 function openRoomListener(ip,port) {
@@ -103,7 +120,8 @@ async function dispatch(action,data,request) {
       (ip==='127.0.0.1' && ['0.0.0.0','::'].includes(primary.address)));
     if (needsListener && !onHost) throw Error('Para alterar IP ou porta, abra o jogo no computador do servidor.');
     const listener=needsListener ? await openRoomListener(ip,port) : null;
-    const room={code,members:[],state:null,shareIp:ip,port,capacity,listener,requests:new Map()};
+    const room={code,members:[],state:null,shareIp:ip,port,capacity,listener,requests:new Map(),
+      chat:[],chatSeq:0,subscribers:new Set()};
     rooms.set(code,room);
     return enter(room,data.name);
   }
@@ -150,6 +168,7 @@ async function dispatch(action,data,request) {
       if (!room.state) {
         room.election=null;
         room.members.splice(room.members.indexOf(member),1);
+        publish(room);
       }
       return {};
     case 'admit': {
@@ -192,11 +211,23 @@ async function dispatch(action,data,request) {
       if (data.action==='build' && !Number.isInteger(data.route)) throw Error('Escolha um trecho.');
       Rail.play(room.state,room.members.indexOf(member),data.action,data.route);
       break;
+    case 'chat': {
+      const now=Date.now();
+      if (member.lastChat && now-member.lastChat<500) throw Error('Aguarde um instante antes de enviar outra mensagem.');
+      const text=String(data.text ?? '').replace(/[\u0000-\u001f\u007f]/g,' ').trim().slice(0,240);
+      if (!text) throw Error('Escreva uma mensagem.');
+      member.lastChat=now;
+      room.chat.push({id:++room.chatSeq,index:room.members.indexOf(member),name:member.name,
+        paint:member.paint,text,time:now});
+      if (room.chat.length>100) room.chat.splice(0,room.chat.length-100);
+      break;
+    }
     case 'status':
       break;
     default:
       throw Error('Ação desconhecida.');
   }
+  if (action!=='status') publish(room);
   return snapshot(room,member);
 }
 async function handleRequest(request,response) {
@@ -205,6 +236,28 @@ async function handleRequest(request,response) {
   if (request.method==='GET' && asset) {
     response.writeHead(200,{'Content-Type':asset[1],'X-Content-Type-Options':'nosniff'});
     response.end(asset[0]);
+    return;
+  }
+  if (request.method==='GET' && path==='/api/events') {
+    if (request.headers.origin && request.headers.origin!=='http://'+request.headers.host) {
+      return send(response,403,{error:'Origem inválida.'});
+    }
+    const params=new URL(request.url,'http://localhost').searchParams;
+    const target=rooms.get(params.get('code'));
+    const member=target?.members.find(candidate=>candidate.token===params.get('token'));
+    if (!member) return send(response,404,{error:'Sessão inválida.'});
+    response.writeHead(200,{'Content-Type':'text/event-stream; charset=utf-8',
+      'Cache-Control':'no-cache, no-transform','Connection':'keep-alive','X-Accel-Buffering':'no'});
+    response.write(': conectado\n\n');
+    sendEvent(response,'update',snapshot(target,member));
+    const subscriber={member,response};
+    target.subscribers.add(subscriber);
+    const heartbeat=setInterval(()=>{
+      if (!response.destroyed) response.write(': ping\n\n');
+    },20000);
+    heartbeat.unref();
+    const cleanup=()=>{ clearInterval(heartbeat); target.subscribers.delete(subscriber); };
+    response.on('close',cleanup);
     return;
   }
   if (request.method!=='POST' || !path.startsWith('/api/')) {
